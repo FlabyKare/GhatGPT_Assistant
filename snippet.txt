@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>ChatGPT</title>
+    <style>
+        #chat-container {
+            width: 400px;
+            height: 500px;
+            border: 1px solid #ccc;
+            overflow-y: scroll;
+            padding: 10px;
+        }
+    </style>
+</head>
+<body>
+
+<?php
+    session_start(); // Добавляем вызов session_start() для работы с сессиями
+
+    if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+        if (!empty($_POST['message'])) {
+            // Обработка введенного сообщения и получение ответа
+            $user_message = $_POST['message'];
+            $response = gpt_get($user_message);
+
+            // Сохранение ответа в сессии
+            $_SESSION['previous_response'] = $response;
+            echo $response; // Отправка ответа обратно на клиентскую сторону
+            exit(); // Добавляем exit() для прекращения выполнения скрипта после отправки ответа
+        }
+    }
+
+    function gpt_get($textmsg) {
+        $openai_api_key = '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'; // Вставьте свой токен здесь
+    
+        $url = 'https://api.openai.com/v1/chat/completions';
+        $data = [
+            'model' => 'gpt-3.5-turbo',
+            'messages' => [],
+        ];
+    
+        $data['messages'][] = [
+            'role' => 'user',
+            'content' => $textmsg,
+        ];
+    
+        $options = [
+            'http' => [
+                'header' => "Content-Type: application/json\r\nAuthorization: Bearer $openai_api_key\r\n",
+                'method' => 'POST',
+                'content' => json_encode($data),
+            ],
+        ];
+    
+        $context = stream_context_create($options);
+        $result = file_get_contents($url, false, $context);
+        if ($result === false) {
+            die('Error sending request to OpenAI API');
+        }
+        
+        $response = json_decode($result, true);
+        
+        if (!$response || !isset($response['choices'])) {
+            die('Invalid response from OpenAI API');
+        }
+        
+        $generated_text = $response['choices'][0]['message']['content'];
+        
+        // Преобразование HTML-кода в текст
+        $decoded_text = htmlspecialchars($generated_text);
+        
+        // Сохранение ответа в сессии
+        $_SESSION['previous_response'] = $generated_text;
+
+        return $decoded_text;
+    }
+    
+?>
+
+<h1>ChatGPT</h1>
+
+<div id="chat-container">
+    <div id="chat-log">
+        <div>ChatGPT: Здравствуйте, чем могу быть вам полезен?</div>
+    </div>
+</div>
+
+<form id="chat-form" onsubmit="sendMessage(); return false;">
+    <input type="text" id="message-input" placeholder="Введите ваш вопрос..." autocomplete="off">
+    <button type="submit">Отправить</button>
+</form>
+
+<script>
+function sendMessage() {
+    var messageInput = document.getElementById('message-input');
+    var message = messageInput.value.trim();
+    message.value = "";
+
+    if (message !== '') {
+        appendMessage('Вы: ' + message);
+
+        // Отправка сообщения на сервер
+        var xhr = new XMLHttpRequest();
+        xhr.open('POST', '', true);
+        xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+        xhr.onreadystatechange = function () {
+            if (xhr.readyState === XMLHttpRequest.DONE && xhr.status === 200) {
+                var response = xhr.responseText;
+                appendMessage('ChatGPT: ' + response);
+                messageInput.value = '';
+            }
+        };
+        xhr.send('message=' + encodeURIComponent(message));
+    }
+    event.preventDefault(); // Отменить стандартное действие формы
+}
+
+
+function appendMessage(message) {
+var chatLog = document.getElementById('chat-log');
+var messageElement = document.createElement('div');
+messageElement.innerText = message; // Заменили textContent на innerText
+chatLog.appendChild(messageElement);
+}
+</script>
+
+</body>
+</html>
+
